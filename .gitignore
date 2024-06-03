@@ -1,0 +1,3 @@
+results/*
+app/__pycache__/*
+client.log
