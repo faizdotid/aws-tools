@@ -1,4 +1,4 @@
-# AWS CLI
+# AWS Tools
 
 This project is a command-line interface (CLI) for managing AWS resources using Python. Most of the commands are EC2 and the rest are some other AWS services
 
