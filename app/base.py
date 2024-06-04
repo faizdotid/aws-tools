@@ -1,10 +1,11 @@
 from boto3 import Session, client
 
-class BaseClient:
+class BaseSession:
 
-    _session: Session = None
+    __session: Session = None
 
-    _regions = [        {
+    __regions = [
+        {
             'name': 'us-east-1',
             'description': 'US East (N. Virginia)'
         },
@@ -92,7 +93,7 @@ class BaseClient:
         aws_secret_access_key: str,
         region_name: str,
     ) -> None:
-        cls._session = Session(
+        cls.__session = Session(
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
             region_name=region_name
@@ -100,8 +101,12 @@ class BaseClient:
 
     @classmethod
     def get_client(cls, service_name: str, region_name: str) -> client:
-        return cls._session.client(service_name, region_name=region_name)
+        return cls.__session.client(service_name, region_name=region_name)
     
     @property
     def regions(self):
-        return self._regions
+        return self.__regions
+    
+    @property
+    def session(self):
+        return self.__session

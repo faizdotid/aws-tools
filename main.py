@@ -1,4 +1,8 @@
 from app import Command
 
-com = Command()
-com.start()
+def main():
+    command = Command()
+    command.start()
+
+if __name__ == '__main__':
+    main()

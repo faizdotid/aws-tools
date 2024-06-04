@@ -1,4 +1,5 @@
 from .client import Client
+
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.progress import Progress
@@ -6,47 +7,55 @@ from rich.progress import Progress
 import os
 from typing import List
 
+
 class Command:
 
     def __init__(self):
-        self._console = Console()
-        self._prompt = Prompt()
-        self._progress = Progress()
-        self._client = Client(
-            console=self._console,
-            prompt=self._prompt,
-            progress=self._progress
+        self.__console = Console()
+        self.__prompt = Prompt()
+        self.__progress = Progress()
+        self.__client = Client(
+            console=self.__console,
+            prompt=self.__prompt,
+            progress=self.__progress
         )
-        self._client._console.print(
-                ':sparkles: [bold cyan]Welcome to the AWS CLI[/bold cyan] :sparkles:\n'
-                '[bold cyan]Type \'help\' to see available commands[/bold cyan]'
-            )
-        self.init_folder()
+        self.init()
 
-    def init_folder(self):
+    def init(self):
         if not os.path.exists('results'):
             os.makedirs('results')
         if not os.path.exists('results/keypairs'):
             os.makedirs('results/keypairs')
+        self.__console.print(
+            ':sparkles: [bold cyan]Welcome to the AWS CLI[/bold cyan] :sparkles:\n'
+            '[bold cyan]Type \'help\' to see available commands[/bold cyan]'
+        )
 
-    def extract_command(self, command: str, skip: int) -> List[str]:
+    def extract_command(
+            self, command: str,
+            skip: int
+        ) -> List[str]:
         return command.split()[skip:]
 
-    def execute_command(self, command: str, method_name: str, skip: int) -> None:
+    def execute_command(
+            self, command: str, method_name: str,
+            skip: int
+        ) -> None:
         args = self.extract_command(command, skip)
-        if self._client._ec2_client.client is None:
+        if self.__client._base_session_session is None:
             if method_name.startswith('configure'):
-                self._client.configure(*args)
+                self.__client.configure(*args)
                 return
-            self._client._console.print(
-                ':exclamation: [bold red]Please configure first[/bold red] :exclamation:')
-            self._client.configure()
+            self.__console.print(':exclamation: [bold red]Please configure first[/bold red] :exclamation:')
+            self.__client.configure()
         else:
             getattr(self._client, method_name)(*args)
 
     def start(self):
         try:
-            '''Main CLI loop'''
+            '''
+            main loop
+            '''
             command_list = [
                 {
                     "command": "configure",
@@ -176,18 +185,16 @@ class Command:
             ]
 
             while True:
-                input_command = self._client._prompt.ask(
-                    ':keyboard: [bold cyan]Enter command[/bold cyan] :keyboard:'
-                )
+                input_command = self.__prompt.ask(':keyboard: [bold cyan]Enter command[/bold cyan] :keyboard:')
                 if input_command == 'exit':
-                    self._client._console.print(
-                        ':wave: [bold cyan]Goodbye![/bold cyan] :wave:')
+                    self.__console.print(':wave: [bold cyan]Goodbye![/bold cyan] :wave:')
                     break
                 elif input_command == 'help':
-                    self._client._console.print(':information_source: [bold cyan]Available Commands:[/bold cyan] :information_source:')
+                    self.__console.print(':information_source: [bold cyan]Available Commands:[/bold cyan] :information_source:')
                     for command in sorted(command_list, key=lambda x: x['command']):
-                        args = ' '.join([f'[bold green]<{arg}>[/bold green]' for arg in command.get("args", [])])
-                        self._client._console.print(
+                        args = ' '.join(
+                            [f'[bold green]<{arg}>[/bold green]' for arg in command.get("args", [])])
+                        self.__console.print(
                             f':gear: [bold yellow]{command["command"]}[/bold yellow]: {command["description"]} {args}'
                         )
                 elif input_command == 'clear':
@@ -202,10 +209,9 @@ class Command:
                             )
                             break
                     else:
-                        self._client._console.print(
-                            ':exclamation: [bold red]Command not found. Type \'help\' to see available commands[/bold red] :exclamation:')
+                        self.__console.print(':exclamation: [bold red]Command not found. Type \'help\' to see available commands[/bold red] :exclamation:')
         except KeyboardInterrupt:
-            if self._prompt.ask('\n[bold red]Are you sure you want to exit?[/bold red] (y/n)') == 'y':
+            if self.__prompt.ask('\n[bold red]Are you sure you want to exit?[/bold red] (y/n)') == 'y':
                 self._console.print(
                     ':wave: [bold cyan]Goodbye![/bold cyan] :wave:')
                 exit(0)
