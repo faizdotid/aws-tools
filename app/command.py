@@ -49,7 +49,7 @@ class Command:
             self.__console.print(':exclamation: [bold red]Please configure first[/bold red] :exclamation:')
             self.__client.configure()
         else:
-            getattr(self._client, method_name)(*args)
+            getattr(self.__client, method_name)(*args)
 
     def start(self):
         try:
@@ -181,7 +181,18 @@ class Command:
                     "skip": 2,
                     "method_name": "show_regions",
                     "args": []
-                }
+                },
+                # Still development
+                # {
+                #     "command": "show password",
+                #     "description": "Show password of instance",
+                #     "skip": 2,
+                #     "method_name": "show_password",
+                #     "args": [
+                #         "instance_id"
+                #     ]
+                # }
+
             ]
 
             while True:
@@ -212,7 +223,7 @@ class Command:
                         self.__console.print(':exclamation: [bold red]Command not found. Type \'help\' to see available commands[/bold red] :exclamation:')
         except KeyboardInterrupt:
             if self.__prompt.ask('\n[bold red]Are you sure you want to exit?[/bold red] (y/n)') == 'y':
-                self._console.print(
+                self.__console.print(
                     ':wave: [bold cyan]Goodbye![/bold cyan] :wave:')
                 exit(0)
             self.start()

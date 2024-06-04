@@ -24,7 +24,7 @@ class Client:
 
     def __init__(
             self, console: Console,
-            prompt: Prompt, progress: Progress
+            prompt: Prompt
         ) -> None:
         self.__base_session = BaseSession()
         self.__ec2_client = EC2Client()
@@ -117,13 +117,15 @@ class Client:
         table.add_column('Instance Type', style='cyan')
         table.add_column('VCPU', style='magenta')
         table.add_column('Memory', style='green')
+        table.add_column('Architecture', style='yellow')
         table.add_column('Storage', style='blue')
-        table.add_column('Bandwidth', style='yellow')
+        table.add_column('Network Performance', style='purple')
         for instance_type in response:
             table.add_row(
                 instance_type['InstanceType'],
                 str(instance_type['VCpuInfo']['DefaultVCpus']),
                 str(self.mb_to_gb(instance_type['MemoryInfo']['SizeInMiB'])) + ' GB',
+                ', '.join(instance_type['ProcessorInfo']['SupportedArchitectures']),
                 'EBS-Only' if not instance_type['InstanceStorageSupported'] else str(instance_type['InstanceStorageInfo']['TotalSizeInGB']) + ' GB',
                 str(instance_type['NetworkInfo']['NetworkPerformance'])
             )
@@ -158,7 +160,7 @@ class Client:
         image_name = ' '.join(args) if args else ''
         response = self.__ec2_client._execute('_show_images', image_name)
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         response = response['response']
         table = Table(title=':frame_with_picture: Images')
@@ -180,7 +182,7 @@ class Client:
     def show_key_pairs(self, *args) -> None:
         response = self.__ec2_client._execute('_show_key_pairs', *args)
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         response = response['response']
         table = Table(title=':key: Key Pairs')
@@ -198,7 +200,7 @@ class Client:
     def show_security_groups(self, *args) -> None:
         response = self.__ec2_client._execute('_show_security_groups', *args)
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         response = response['response']
         table = Table(title=':lock: Security Groups')
@@ -214,8 +216,8 @@ class Client:
         self.__console.print(table)
 
     def create_instance(self):
-        instance_type = self._prompt.ask(':package: [bold cyan]Instance Type [/bold cyan][bold yellow](e.g. t2.micro)[/bold yellow]')
-        image_id = self._prompt.ask(':frame_with_picture: [bold cyan]Image ID[/bold cyan]')
+        instance_type = self.__prompt.ask(':package: [bold cyan]Instance Type [/bold cyan][bold yellow](e.g. t2.micro)[/bold yellow]')
+        image_id = self.__prompt.ask(':frame_with_picture: [bold cyan]Image ID[/bold cyan]')
         key_pairs = self.__ec2_client._execute('_show_key_pairs')
         if not key_pairs['status']:
             self.__print_error(key_pairs['response'])
@@ -229,7 +231,7 @@ class Client:
             + ', '.join([f'{key_pair['KeyName']}:{key_pair['KeyPairId']}' for key_pair in key_pairs['response']])
             + '[/green][/bold cyan]'
         )
-        key_name = self._prompt.ask(':key: [bold cyan]Key Name[/bold cyan]',)
+        key_name = self.__prompt.ask(':key: [bold cyan]Key Name[/bold cyan]',)
         if key_name not in [key_pair['KeyName'] for key_pair in key_pairs['response']]:
             self.__console.print(':x: [bold red]Key pair not found. Please create a key pair first.[/bold red]')
             key_name, key_pair_id = self.create_key_pair()
@@ -253,21 +255,21 @@ class Client:
                 + ', '.join([security_group['GroupName'] for security_group in security_groups['response']])
                 + '[/green][/bold cyan]'
             )
-            security_group = self._prompt.ask(':lock: [bold cyan]Security Group[/bold cyan]', default='default')
+            security_group = self.__prompt.ask(':lock: [bold cyan]Security Group[/bold cyan]', default='default')
             if security_group not in [security_group['GroupName'] for security_group in security_groups['response']]:
                 self.__console.print(':x: [bold red]Security group not found. Creating a default security group.[/bold red]')
                 security_group = self.__ec2_client._execute(
                     '_create_security_group', 'default',
                     'Default security group'
                 )
-        storage_size = self._prompt.ask(':floppy_disk: [bold cyan]Storage Size (GB)[/bold cyan]', default='8')
+        storage_size = self.__prompt.ask(':floppy_disk: [bold cyan]Storage Size (GB)[/bold cyan]', default='8')
         response = self.__ec2_client._execute(
             '_create_instance', image_id,
             instance_type, key_name,
             int(storage_size), security_group
         )
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         self.__console.print(':white_check_mark: [bold green]Instance created successfully[/bold green]')
         with Progress(
@@ -305,7 +307,7 @@ class Client:
             key_name = args[0]
         response = self.__ec2_client._execute('_create_key_pair', key_name)
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         outfile = f'results/keypairs/{response['response']['KeyName']}-{response['response']['KeyPairId']}.pem'
         with os.fdopen(
@@ -329,7 +331,7 @@ class Client:
             description
         )
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         self.__console.print(
             ':white_check_mark: [bold green]Successfully created security group '
@@ -347,7 +349,7 @@ class Client:
             '_authorize_all_traffic', security_group_id
         )
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         self.__console.print(
             ':white_check_mark: [bold green]Successfully authorized all traffic for '
@@ -357,12 +359,12 @@ class Client:
 
     def show_service_quotas(self, *args) -> None:
         service_code = ' '.join(args) if args else ''
-        response = self._service_quotas_client._execute(
+        response = self.__service_quotas_client._execute(
             '_show_service_quotas', service_code,
             []
         )
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         response = response['response']
         table = Table(title=':chart_with_upwards_trend: Service Quotas')
@@ -388,17 +390,20 @@ class Client:
             '_terminate_instance', instance_id
         )
         if not response['status']:
-            self.print_err(response['response'])
+            self.__print_error(response['response'])
             return
         self.__console.print(':white_check_mark: [bold green]Instance terminated successfully[/bold green]')
 
-    def show_password(self, *args) -> None:
-        instance_id = args[0] if len(args) > 0 else self._prompt.ask(':warning: [bold cyan]Instance ID[/bold cyan]')
-        response = self.__ec2_client._execute(
-            '_show_password', instance_id
-        )
-        if not response['status']:
-            self.print_err(response['response'])
-            return
-        self.__console.print(':information_source: [bold cyan]Instance ID[/bold cyan]: ' + instance_id)
-        self.__console.print(':information_source: [bold cyan]Password[/bold cyan]: ' + response['response']['PasswordData'])
+    # NOTE: Still development
+    # def show_password(self, *args) -> None:
+    #     instance_id = args[0] if len(args) > 0 else self.__prompt.ask(':warning: [bold cyan]Instance ID[/bold cyan]')
+    #     response = self.__ec2_client._execute(
+    #         '_show_password_data', instance_id
+    #     )
+    #     print(response)
+    #     if not response['status']:
+    #         self.__print_error(response['response'])
+    #         return
+    #     if response['response']['PasswordData'] is '':
+    #         self.__console.print(':warning: [bold yellow]Password not available for this instance[/bold yellow]')
+    #         return
