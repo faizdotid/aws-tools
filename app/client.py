@@ -151,7 +151,7 @@ class Client:
                     instance['InstanceType'],
                     instance['State']['Name'],
                     instance.get('PublicIpAddress', 'N/A'),
-                    instance['KeyName'],
+                    instance['KeyName'] if 'KeyName' in instance.keys() else 'N/A',
                     datetime.datetime.strftime(instance['LaunchTime'], '%Y-%m-%d %H:%M:%S')
                 )
         self.__console.print(table)
