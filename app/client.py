@@ -326,7 +326,7 @@ class Client:
         else:
             security_group = args[0]
             description = ' '.join(args[1:])
-        response = self._ec2_client._execute(
+        response = self.__ec2_client._execute(
             '_create_security_group', security_group,
             description
         )
@@ -345,7 +345,7 @@ class Client:
 
     def authorize_all_traffic(self, *args) -> None:
         security_group_id = args[0] if len(args) > 0 else self.__prompt.ask(':lock: [bold cyan]Security Group ID[/bold cyan]')
-        response = self._ec2_client._execute(
+        response = self.__ec2_client._execute(
             '_authorize_all_traffic', security_group_id
         )
         if not response['status']:
