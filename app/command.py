@@ -2,7 +2,6 @@ from .client import Client
 
 from rich.console import Console
 from rich.prompt import Prompt
-from rich.progress import Progress
 
 import os
 from typing import List
@@ -13,11 +12,9 @@ class Command:
     def __init__(self):
         self.__console = Console()
         self.__prompt = Prompt()
-        self.__progress = Progress()
         self.__client = Client(
             console=self.__console,
             prompt=self.__prompt,
-            progress=self.__progress
         )
         self.init()
 
