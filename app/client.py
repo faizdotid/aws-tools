@@ -292,12 +292,12 @@ class Client:
         self.__console.print(f':information_source: [bold cyan]Instance ID[/bold cyan]: {instance['InstanceId']}')
         self.__console.print(f':information_source: [bold cyan]Public IP[/bold cyan]: {instance.get('PublicIpAddress', 'N/A')}')
         self.__console.print(f':information_source: [bold cyan]Public Key[/bold cyan]: {instance['KeyName']}')
-        self.__console.print(f':information_source: [bold cyan]Public Key File[/bold cyan]: results/keypairs/{key_pair_id}.pem')
+        self.__console.print(f':information_source: [bold cyan]Public Key File[/bold cyan]: results/keypairs/{key_name}-{key_pair_id}.pem')
         with open(f'results/instances.txt', 'a') as instance_file:
             instance_file.write(f'Instance ID: {instance['InstanceId']}\n')
             instance_file.write(f'Public IP: {instance.get('PublicIpAddress', 'N/A')}\n')
             instance_file.write(f'Public Key: {instance['KeyName']}\n')
-            instance_file.write(f'Public Key File: results/keypairs/{key_pair_id}.pem\n')
+            instance_file.write(f'Public Key File: results/keypairs/{key_name}-{key_pair_id}.pem\n')
             instance_file.write('-' * 50 + '\n')
 
     def create_key_pair(self, *args) -> Tuple[str, str]:
