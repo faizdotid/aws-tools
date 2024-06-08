@@ -32,13 +32,13 @@ class BaseClient:
             }
         except ClientError as e:
             if e.response["Error"]["Code"] == "InvalidClientTokenId":
-                self._client = None
+                self.__client = None
                 return {
                     "status": False,
                     "response": "Invalid credentials. Please configure again."
                 }
             if e.response["Error"]["Code"] == "AuthFailure":
-                self._client = None
+                self.__client = None
                 return {
                     "status": False,
                     "response": "Invalid credentials. Please configure again."
