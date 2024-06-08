@@ -90,14 +90,14 @@ class Client:
             region_name = self.__prompt.ask(':globe_with_meridians: [bold cyan]Region Name ? [/bold cyan]', default='us-east-1')
         else:
             region_name = args[0]
-        try:
-            self.__ec2_client.client = self.__base_session.get_client('ec2', region_name)
-            self.__service_quotas_client.client = self.__base_session.get_client('service-quotas', region_name)
-            self.__console.print(f':white_check_mark: [bold green]Region changed to {region_name} successfully[/bold green]')
-            logging.info(f'Region changed to {region_name} successfully.')
-        except Exception as e:
-            self.__console.print(f':x: [bold red]Failed to change region: {str(e)}[/bold red]')
-            logging.error(f'Failed to change region: {str(e)}')
+        regions = map(lambda region: region['name'], self.__base_session.regions)
+        if region_name not in regions:
+            self.__console.print(f':x: [bold red]Region {region_name} not supported[/bold red]')
+            return
+        self.__ec2_client.client = self.__base_session.get_client('ec2', region_name)
+        self.__service_quotas_client.client = self.__base_session.get_client('service-quotas', region_name)
+        self.__console.print(f':white_check_mark: [bold green]Region changed to {region_name} successfully[/bold green]')
+        logging.info(f'Region changed to {region_name} successfully.')
 
     def show_regions(self) -> None:
         table = Table(title=':globe_with_meridians: Supported Regions')
