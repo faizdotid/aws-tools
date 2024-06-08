@@ -358,7 +358,7 @@ class Client:
         )
 
     def show_service_quotas(self, *args) -> None:
-        service_code = ' '.join(args) if args else ''
+        service_code = ' '.join(args) if args else self.__prompt.ask(':chart_with_upwards_trend: [bold cyan]Service Code[/bold cyan]')
         response = self.__service_quotas_client._execute(
             '_show_service_quotas', service_code,
             []
