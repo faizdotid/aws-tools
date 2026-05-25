@@ -1,5 +1,6 @@
 """AWS Controller facade with caching and unified data access."""
 
+import logging
 import time
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +12,12 @@ from .session import SessionManager
 from .utils import ensure_results_dir, save_json
 
 __all__ = ["AWSController"]
+
+logging.basicConfig(
+    filename="client.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
 
 
 class _Cache:
@@ -79,6 +86,7 @@ class AWSController:
         self._logs.append(message)
         if len(self._logs) > 200:
             self._logs = self._logs[-100:]
+        logging.info(message)
 
     def get_logs(self) -> List[str]:
         """Get activity log entries."""
@@ -114,6 +122,7 @@ class AWSController:
             return {"status": True, "response": f"Configured for {region}"}
         except Exception as exc:
             self._last_error = str(exc)
+            logging.error(f"Configuration failed: {exc}")
             return {"status": False, "response": str(exc)}
 
     def change_region(self, region: str) -> Dict[str, Any]:
@@ -139,6 +148,7 @@ class AWSController:
             return {"status": True, "response": f"Region changed to {region}"}
         except Exception as exc:
             self._last_error = str(exc)
+            logging.error(f"Region change failed: {exc}")
             return {"status": False, "response": str(exc)}
 
     # ── EC2: Instances ───────────────────────────────────────────
@@ -174,16 +184,6 @@ class AWSController:
         data = result["response"]
         self._cache.set(cache_key, data)
         return data
-
-    def get_instance_status(self, instance_ids: List[str]) -> List[Dict[str, Any]]:
-        """Get instance status checks."""
-        if not instance_ids:
-            return []
-        result = self._ec2.call(self._ec2.describe_instance_status, instance_ids)
-        if not result["status"]:
-            self._last_error = result["response"]
-            return []
-        return result["response"]
 
     def start_instance(self, instance_id: str) -> bool:
         """Start a stopped instance."""
@@ -344,6 +344,7 @@ class AWSController:
             return True
         except Exception as exc:
             self._last_error = str(exc)
+            logging.error(f"Authorize failed: {exc}")
             return False
 
     # ── EC2: VPCs ────────────────────────────────────────────────
@@ -404,14 +405,6 @@ class AWSController:
         if not result["status"]:
             self._last_error = result["response"]
             return []
-        return result["response"]
-
-    def get_bucket_info(self, bucket: str) -> Dict[str, Any]:
-        """Get combined bucket info."""
-        result = self._s3.call(self._s3.get_bucket_info, bucket)
-        if not result["status"]:
-            self._last_error = result["response"]
-            return {}
         return result["response"]
 
     # ── Service Quotas ───────────────────────────────────────────

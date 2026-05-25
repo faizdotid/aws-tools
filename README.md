@@ -1,126 +1,87 @@
 # AWS Tools
 
-A command-line interface (CLI) for managing AWS resources using Python. Built with [Rich](https://github.com/Textualize/rich) for an enhanced terminal experience.
+Interactive CLI for managing AWS resources using Python. Features dropdown menus, autocomplete, rich tables, and progress spinners.
 
 ## Prerequisites
 
-- Python 3.8 or later
+- Python 3.8+
 - AWS credentials (Access Key ID & Secret Access Key)
 
 ## Installation
 
-1. Clone the repository:
-
-   ```sh
-   git clone https://github.com/faizdotid/aws-tools
-   cd aws-tools
-   ```
-
-2. Install dependencies:
-
-   ```sh
-   pip install -r requirements.txt
-   ```
+```bash
+git clone https://github.com/faizalpratama/aws-tools
+cd aws-tools
+pip install -r requirements.txt
+```
 
 ## Usage
 
-Run the CLI:
-
-```sh
+```bash
 python3 main.py
 ```
 
-Type `help` inside the CLI to see all available commands.
+Navigate menus using **arrow keys** and **Enter**.
 
-## Available Commands
+## Features
 
-### Configuration
-| Command | Description |
-|---------|-------------|
-| `configure <key> <secret> <region>` | Configure AWS credentials |
-| `change region <region>` | Change AWS region |
-| `show regions` | List supported AWS regions |
+- **Interactive Dropdown Menus** — Navigate with arrow keys
+- **Autocomplete Inputs** — Quick selection for key pairs, security groups, regions
+- **Rich Tables** — Styled output for instances, buckets, VPCs, etc.
+- **Progress Spinners** — Visual feedback during API calls
+- **Data Caching** — 30-second TTL cache to reduce API calls
+- **Export to JSON** — Export instances and images
+- **Activity Logging** — Persistent logs to `client.log`
 
-### EC2 Instances
-| Command | Description |
-|---------|-------------|
-| `show instances <id>` | Show EC2 instances |
-| `show instance types <type>` | Show instance types |
-| `create instance` | Create a new EC2 instance (interactive) |
-| `start instance <id>` | Start a stopped instance |
-| `stop instance <id>` | Stop a running instance |
-| `reboot instance <id>` | Reboot an instance |
-| `terminate instance <id>` | Terminate an instance |
+## Menu Structure
 
-### AMIs
-| Command | Description |
-|---------|-------------|
-| `show images <name>` | Show Amazon Machine Images |
-
-### Key Pairs
-| Command | Description |
-|---------|-------------|
-| `show keypairs <name>` | Show EC2 key pairs |
-| `create keypair <name>` | Create a new key pair |
-
-### Security Groups
-| Command | Description |
-|---------|-------------|
-| `show security groups <name>` | Show security groups |
-| `create security group <name> <desc>` | Create a security group |
-| `authorize security group <id>` | Authorize all traffic (0.0.0.0/0) |
-
-### VPC & Networking
-| Command | Description |
-|---------|-------------|
-| `show vpcs` | List all VPCs |
-| `show subnets <vpc_id>` | List subnets |
-
-### S3
-| Command | Description |
-|---------|-------------|
-| `show buckets` | List S3 buckets |
-| `show objects <bucket>` | List objects in a bucket |
-
-### Service Quotas
-| Command | Description |
-|---------|-------------|
-| `show service quotas <code>` | Show service quotas (e.g. `ec2`) |
-
-### Export
-| Command | Description |
-|---------|-------------|
-| `export instances <file>` | Export instances to JSON |
-| `export images <file>` | Export images to JSON |
-
-### CLI
-| Command | Description |
-|---------|-------------|
-| `help` | Show available commands |
-| `clear` | Clear screen |
-| `exit` | Quit the CLI |
+```
+Main Menu
+├── 🖥️ EC2 Management
+│   ├── 📋 Show Instances
+│   ├── 📦 Show Instance Types
+│   ├── 🖼️ Show Images (AMIs)
+│   ├── 🔑 Show Key Pairs
+│   ├── 🔒 Show Security Groups
+│   ├── ➕ Create Instance
+│   ├── 🔐 Create Key Pair (.pem auto-saved)
+│   ├── 🔓 Create Security Group
+│   ├── 🌐 Authorize All Traffic
+│   ├── ▶ Start / ⏹ Stop / 🔄 Reboot / 🗑 Terminate
+├── 🌐 VPC & Networking
+│   ├── 🌐 Show VPCs
+│   └── 📡 Show Subnets
+├── 🪣 S3
+│   ├── 🪣 Show Buckets
+│   └── 📁 Show Objects
+├── 📊 Service Quotas
+├── 📤 Export (JSON)
+├── ⚙️ Configuration
+│   ├── 🔑 Configure Credentials
+│   ├── 🌍 Change Region
+│   └── 🗺️ Show Regions
+└── 🚪 Exit
+```
 
 ## Project Structure
 
 ```
 app/
-├── __init__.py           # Package exports
-├── config.py             # AWS configuration & region definitions
-├── utils.py              # Utility functions & Rich helpers
-├── session.py            # AWS session manager (replaces base.py)
-├── boto3_base.py         # Base client with unified error handling
-├── ec2.py                # EC2 service client
-├── s3.py                 # S3 service client
-├── service_quotas.py     # Service Quotas client
-├── client.py             # Business logic & Rich UI
-└── command.py            # CLI loop & command parser
+├── __init__.py          # Package exports
+├── config.py            # Region definitions
+├── utils.py             # Helpers & validators
+├── session.py           # AWS session manager
+├── boto3_base.py        # Error handling wrapper
+├── ec2.py               # EC2 API wrappers
+├── s3.py                # S3 API wrappers
+├── service_quotas.py    # Service Quotas API
+├── controller.py        # Facade + caching + logging
+├── ui.py                # Questionary + Rich helpers
+└── cli.py               # Interactive CLI loop
 ```
 
-## Features
+## Key Files
 
-- **Rich UI**: Styled tables, panels, trees, spinners, and progress indicators
-- **Error Handling**: Unified error wrapping with credential auto-reset
-- **Interactive Prompts**: Guided instance creation with validation
-- **Export**: JSON export for instances and images
-- **Auto-complete Suggestions**: Similar command suggestions on typo
-- **Safe Defaults**: Confirmation prompts for destructive actions
+- Key pairs saved to `results/keypairs/{name}-{id}.pem`
+- JSON exports saved to `results/exports/`
+- Logs written to `client.log`

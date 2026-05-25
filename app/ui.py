@@ -15,6 +15,7 @@ __all__ = [
     "ask_confirm",
     "ask_select",
     "ask_autocomplete",
+    "press_any_key",
     "print_error",
     "print_success",
     "print_info",
@@ -68,6 +69,11 @@ def ask_autocomplete(message: str, choices: list) -> str:
     return result or ""
 
 
+def press_any_key(message: str = "Press any key to continue...") -> None:
+    """Wait for user to press any key."""
+    questionary.press_any_key_to_continue(message).ask()
+
+
 def print_error(message: str) -> None:
     """Print styled error message."""
     _print_error(console, message)
@@ -86,6 +92,7 @@ def print_info(label: str, value: str) -> None:
 def print_warning(message: str) -> None:
     """Print styled warning message."""
     from .utils import print_warning as _pw
+
     _pw(console, message)
 
 

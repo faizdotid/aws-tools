@@ -1,35 +1,8 @@
 """Centralized configuration for AWS Tools."""
 
-from dataclasses import dataclass
 from typing import List, Dict, Optional
 
-__all__ = ["AWSConfig", "RegionConfig"]
-
-
-@dataclass(frozen=True)
-class AWSConfig:
-    """Immutable AWS configuration container.
-
-    Attributes:
-        aws_access_key_id: AWS access key ID.
-        aws_secret_access_key: AWS secret access key.
-        region_name: AWS region name (e.g., 'us-east-1').
-    """
-
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    region_name: str
-
-    @property
-    def is_valid(self) -> bool:
-        """Check if all required fields are non-empty."""
-        return all(
-            [
-                bool(self.aws_access_key_id),
-                bool(self.aws_secret_access_key),
-                bool(self.region_name),
-            ]
-        )
+__all__ = ["RegionConfig"]
 
 
 class RegionConfig:

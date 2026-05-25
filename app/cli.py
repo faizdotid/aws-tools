@@ -6,6 +6,8 @@ from rich import box
 
 from .controller import AWSController
 from .config import RegionConfig
+import os
+
 from .ui import (
     console,
     select_menu,
@@ -14,13 +16,14 @@ from .ui import (
     ask_confirm,
     ask_select,
     ask_autocomplete,
+    press_any_key,
     print_error,
     print_success,
     print_info,
     print_warning,
     print_panel,
 )
-from .utils import format_datetime, mb_to_gb, validate_instance_id, validate_ami_id
+from .utils import format_datetime, mb_to_gb, validate_instance_id, validate_ami_id, ensure_results_dir
 
 __all__ = ["AWSCli"]
 
@@ -167,7 +170,7 @@ class AWSCli:
                     format_datetime(inst.get("LaunchTime")),
                 )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _show_instance_types(self) -> None:
         data = self._wait_spinner("Fetching instance types...", self._ctrl.get_instance_types)
@@ -183,7 +186,7 @@ class AWSCli:
         table.add_column("Storage", style="blue")
         table.add_column("Network", style="purple")
 
-        for it in data:
+        for it in data[:100]:
             storage = "EBS-Only"
             if it.get("InstanceStorageSupported"):
                 total = it.get("InstanceStorageInfo", {}).get("TotalSizeInGB", 0)
@@ -197,7 +200,9 @@ class AWSCli:
                 it["NetworkInfo"].get("NetworkPerformance", "N/A"),
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        if len(data) > 100:
+            print_info("Note", f"Showing 100 of {len(data)} instance types")
+        press_any_key()
 
     def _show_images(self) -> None:
         data = self._wait_spinner("Fetching images...", self._ctrl.get_images)
@@ -305,15 +310,26 @@ class AWSCli:
         else:
             print_error(self._ctrl.last_error or "Failed to create instance.")
 
-    def _create_key_pair(self) -> None:
+    def _create_key_pair(self) -> str:
+        """Create a key pair and save the .pem file.
+
+        Returns:
+            Key pair name if successful, empty string otherwise.
+        """
         key_name = ask_text("Key Pair Name")
         if not key_name:
-            return
+            return ""
         result = self._wait_spinner("Creating key pair...", self._ctrl.create_key_pair, key_name)
-        if result:
-            print_success(f"Key pair '{key_name}' created successfully!")
-        else:
+        if not result:
             print_error(self._ctrl.last_error or "Failed.")
+            return ""
+
+        ensure_results_dir()
+        outfile = f"results/keypairs/{result['KeyName']}-{result['KeyPairId']}.pem"
+        with os.fdopen(os.open(outfile, os.O_WRONLY | os.O_CREAT, 0o600), "w") as f:
+            f.write(result["KeyMaterial"])
+        print_success(f"Key pair '{key_name}' created! Saved to {outfile}")
+        return key_name
 
     def _create_security_group(self) -> None:
         name = ask_text("Security Group Name")
@@ -612,7 +628,7 @@ class AWSCli:
                 break
 
     def _configure(self) -> None:
-        key = ask_password("AWS Access Key ID")
+        key = ask_text("AWS Access Key ID")
         if not key:
             return
         secret = ask_password("AWS Secret Access Key")
