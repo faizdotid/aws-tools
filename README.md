@@ -1,48 +1,126 @@
 # AWS Tools
 
-This project is a command-line interface (CLI) for managing AWS resources using Python. Most of the commands are EC2 and the rest are some other AWS services
+A command-line interface (CLI) for managing AWS resources using Python. Built with [Rich](https://github.com/Textualize/rich) for an enhanced terminal experience.
 
 ## Prerequisites
 
-- Python 3.6 or later
-- AWS credentials
+- Python 3.8 or later
+- AWS credentials (Access Key ID & Secret Access Key)
 
 ## Installation
 
 1. Clone the repository:
 
-    ```sh
-    git clone https://github.com/faizdotid/aws-tools
-    cd aws-cli
-    ```
+   ```sh
+   git clone https://github.com/faizdotid/aws-tools
+   cd aws-tools
+   ```
 
-2. Install the required Python packages:
+2. Install dependencies:
 
-    ```sh
-    pip install -r requirements.txt
-    ```
+   ```sh
+   pip install -r requirements.txt
+   ```
 
 ## Usage
 
 Run the CLI:
 
 ```sh
-python main.py
+python3 main.py
 ```
 
-## Availble commands
+Type `help` inside the CLI to see all available commands.
 
-- `configure` <aws_access_key_id> <aws_secret_access_key> <region_name>: Configure AWS credentials.
-- `show instance types` <instance_type>: Show instance types.
-- `show instances` <instance_id>: Show instances.
-- `create instance`: Create an instance.
-- `show images` <image_name>: Show images.
-- `show keypairs` <key_name>: Show key pairs.
-- `create keypair` <key_name>: Create a key pair.
-- `change region` <region_name>: Change the region.
-- `show security groups` <group_name>: Show security groups.
-- `authorize security group` <group_id>: Authorize security group.
-- `create security group` <group_name> <description>: Create a security group.
-- `show service quotas` <service_code>: Show service quotas.
-- `terminate instance` <instance_id>: Terminate an instance.
-- `show regions`: Show regions.
+## Available Commands
+
+### Configuration
+| Command | Description |
+|---------|-------------|
+| `configure <key> <secret> <region>` | Configure AWS credentials |
+| `change region <region>` | Change AWS region |
+| `show regions` | List supported AWS regions |
+
+### EC2 Instances
+| Command | Description |
+|---------|-------------|
+| `show instances <id>` | Show EC2 instances |
+| `show instance types <type>` | Show instance types |
+| `create instance` | Create a new EC2 instance (interactive) |
+| `start instance <id>` | Start a stopped instance |
+| `stop instance <id>` | Stop a running instance |
+| `reboot instance <id>` | Reboot an instance |
+| `terminate instance <id>` | Terminate an instance |
+
+### AMIs
+| Command | Description |
+|---------|-------------|
+| `show images <name>` | Show Amazon Machine Images |
+
+### Key Pairs
+| Command | Description |
+|---------|-------------|
+| `show keypairs <name>` | Show EC2 key pairs |
+| `create keypair <name>` | Create a new key pair |
+
+### Security Groups
+| Command | Description |
+|---------|-------------|
+| `show security groups <name>` | Show security groups |
+| `create security group <name> <desc>` | Create a security group |
+| `authorize security group <id>` | Authorize all traffic (0.0.0.0/0) |
+
+### VPC & Networking
+| Command | Description |
+|---------|-------------|
+| `show vpcs` | List all VPCs |
+| `show subnets <vpc_id>` | List subnets |
+
+### S3
+| Command | Description |
+|---------|-------------|
+| `show buckets` | List S3 buckets |
+| `show objects <bucket>` | List objects in a bucket |
+
+### Service Quotas
+| Command | Description |
+|---------|-------------|
+| `show service quotas <code>` | Show service quotas (e.g. `ec2`) |
+
+### Export
+| Command | Description |
+|---------|-------------|
+| `export instances <file>` | Export instances to JSON |
+| `export images <file>` | Export images to JSON |
+
+### CLI
+| Command | Description |
+|---------|-------------|
+| `help` | Show available commands |
+| `clear` | Clear screen |
+| `exit` | Quit the CLI |
+
+## Project Structure
+
+```
+app/
+├── __init__.py           # Package exports
+├── config.py             # AWS configuration & region definitions
+├── utils.py              # Utility functions & Rich helpers
+├── session.py            # AWS session manager (replaces base.py)
+├── boto3_base.py         # Base client with unified error handling
+├── ec2.py                # EC2 service client
+├── s3.py                 # S3 service client
+├── service_quotas.py     # Service Quotas client
+├── client.py             # Business logic & Rich UI
+└── command.py            # CLI loop & command parser
+```
+
+## Features
+
+- **Rich UI**: Styled tables, panels, trees, spinners, and progress indicators
+- **Error Handling**: Unified error wrapping with credential auto-reset
+- **Interactive Prompts**: Guided instance creation with validation
+- **Export**: JSON export for instances and images
+- **Auto-complete Suggestions**: Similar command suggestions on typo
+- **Safe Defaults**: Confirmation prompts for destructive actions
