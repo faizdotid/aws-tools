@@ -1,10 +1,11 @@
 """Base client with unified error handling for boto3 services."""
 
 from typing import Any, Callable, Dict
-from functools import wraps
 
 from boto3 import client as boto3_client
 from botocore.exceptions import ClientError
+
+__all__ = ["BaseClient"]
 
 
 class BaseClient:
@@ -25,13 +26,14 @@ class BaseClient:
 
     def call(self, method: Callable, *args, **kwargs) -> Dict[str, Any]:
         """Execute a boto3 method with unified error handling.
-        
+
         Args:
-            method: The boto3 client method to call
-            *args, **kwargs: Arguments to pass to the method
-            
+            method: The boto3 client method to call.
+            *args: Positional arguments for the method.
+            **kwargs: Keyword arguments for the method.
+
         Returns:
-            Dict with 'status' (bool) and 'response' (Any or error message)
+            Dictionary with 'status' (bool) and 'response' (result or error message).
         """
         try:
             response = method(*args, **kwargs)
@@ -42,11 +44,11 @@ class BaseClient:
                 self.__client = None
                 return {
                     "status": False,
-                    "response": "Invalid credentials. Please configure again."
+                    "response": "Invalid credentials. Please configure again.",
                 }
             return {
                 "status": False,
-                "response": e.response.get("Error", {}).get("Message", str(e))
+                "response": e.response.get("Error", {}).get("Message", str(e)),
             }
         except Exception as e:
             return {"status": False, "response": str(e)}

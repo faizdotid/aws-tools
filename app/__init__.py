@@ -1,3 +1,5 @@
-from .command import Command
+"""AWS Tools package."""
 
-__all__ = ['Command']
+from .app import AWSToolsApp
+
+__all__ = ["AWSToolsApp"]
