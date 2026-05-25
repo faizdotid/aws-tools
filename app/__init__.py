@@ -1,5 +1,5 @@
 """AWS Tools package."""
 
-from .app import AWSToolsApp
+from .cli import AWSCli
 
-__all__ = ["AWSToolsApp"]
+__all__ = ["AWSCli"]
