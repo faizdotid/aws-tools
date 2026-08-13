@@ -30,6 +30,7 @@ Navigate menus using **arrow keys** and **Enter**.
 - **Rich Tables** — Styled output for instances, buckets, VPCs, etc.
 - **Progress Spinners** — Visual feedback during API calls
 - **Data Caching** — 30-second TTL cache to reduce API calls
+- **Public AMI Search** — Find Ubuntu, Debian, Amazon Linux, etc. by name filter
 - **Export to JSON** — Export instances and images
 - **Activity Logging** — Persistent logs to `client.log`
 
@@ -46,7 +47,7 @@ Main Menu
 │   ├── ➕ Create Instance
 │   ├── 🔐 Create Key Pair (.pem auto-saved)
 │   ├── 🔓 Create Security Group
-│   ├── 🌐 Authorize All Traffic
+│   ├── 🌐 Authorize Security Group
 │   ├── ▶ Start / ⏹ Stop / 🔄 Reboot / 🗑 Terminate
 ├── 🌐 VPC & Networking
 │   ├── 🌐 Show VPCs
@@ -85,3 +86,14 @@ app/
 - Key pairs saved to `results/keypairs/{name}-{id}.pem`
 - JSON exports saved to `results/exports/`
 - Logs written to `client.log`
+
+## Finding AMIs
+
+`Show Images (AMIs)` searches public images by name filter. Examples:
+
+| OS | Name filter |
+| --- | --- |
+| Ubuntu 24.04 | `ubuntu/images/hvm-ssd/ubuntu-noble-24.04-*` |
+| Debian 12 | `debian-12-*` |
+| Amazon Linux 2 | `amzn2-*` |
+| Amazon Linux 2023 | `al2023-*` |
