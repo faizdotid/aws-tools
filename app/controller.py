@@ -13,11 +13,20 @@ from .utils import ensure_results_dir, save_json
 
 __all__ = ["AWSController"]
 
-logging.basicConfig(
-    filename="client.log",
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
+_logging_configured = False
+
+
+def _setup_logging() -> None:
+    """Configure file logging exactly once."""
+    global _logging_configured
+    if _logging_configured:
+        return
+    logging.basicConfig(
+        filename="client.log",
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
+    _logging_configured = True
 
 
 class _Cache:
@@ -53,11 +62,11 @@ class AWSController:
     """Facade for all AWS service clients with caching."""
 
     def __init__(self) -> None:
+        _setup_logging()
         self._ec2 = EC2Client()
         self._s3 = S3Client()
         self._quotas = ServiceQuotasClient()
         self._cache = _Cache(ttl=30)
-        self._logs: List[str] = []
         self._last_error: Optional[str] = None
         ensure_results_dir()
 
@@ -69,12 +78,6 @@ class AWSController:
         return SessionManager.is_configured()
 
     @property
-    def region(self) -> str:
-        """Get current region name."""
-        session = SessionManager.get_session()
-        return session.region_name if session else "unknown"
-
-    @property
     def last_error(self) -> Optional[str]:
         """Get last error message."""
         return self._last_error
@@ -82,15 +85,38 @@ class AWSController:
     # ── Logging ──────────────────────────────────────────────────
 
     def log(self, message: str) -> None:
-        """Append message to activity log."""
-        self._logs.append(message)
-        if len(self._logs) > 200:
-            self._logs = self._logs[-100:]
+        """Write an entry to the activity log."""
         logging.info(message)
 
-    def get_logs(self) -> List[str]:
-        """Get activity log entries."""
-        return self._logs[-50:]
+    # ── Internal helpers ─────────────────────────────────────────
+
+    def _call(self, client: Any, method, *args) -> Dict[str, Any]:
+        """Execute a boto3 call and centralize auth-error handling.
+
+        Args:
+            client: BaseClient wrapper instance.
+            method: The wrapper method to invoke.
+            *args: Positional arguments for the method.
+
+        Returns:
+            Status dictionary from BaseClient.call.
+        """
+        self._last_error = None
+        result = client.call(method, *args)
+        if result.get("auth_error"):
+            self._handle_auth_error()
+        if not result["status"]:
+            self._last_error = result["response"]
+        return result
+
+    def _handle_auth_error(self) -> None:
+        """Reset session state after an invalid-credentials error."""
+        SessionManager.reset()
+        self._ec2.client = None
+        self._s3.client = None
+        self._quotas.client = None
+        self._cache.invalidate()
+        self._last_error = "Invalid credentials. Please configure again."
 
     # ── Configuration ────────────────────────────────────────────
 
@@ -139,6 +165,7 @@ class AWSController:
             return {"status": False, "response": self._last_error}
 
         try:
+            SessionManager.update_region(region)
             self._ec2.client = SessionManager.get_client("ec2", region)
             self._s3.client = SessionManager.get_client("s3", region)
             self._quotas.client = SessionManager.get_client("service-quotas", region)
@@ -160,9 +187,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_instances, instance_id)
+        result = self._call(self._ec2, self._ec2.describe_instances, instance_id)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -176,9 +202,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_instance_types, instance_type)
+        result = self._call(self._ec2, self._ec2.describe_instance_types, instance_type)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -187,41 +212,37 @@ class AWSController:
 
     def start_instance(self, instance_id: str) -> bool:
         """Start a stopped instance."""
-        result = self._ec2.call(self._ec2.start_instances, [instance_id])
+        result = self._call(self._ec2, self._ec2.start_instances, [instance_id])
         if result["status"]:
             self.log(f"Started instance {instance_id}")
             self._cache.invalidate("instances:all")
             return True
-        self._last_error = result["response"]
         return False
 
     def stop_instance(self, instance_id: str) -> bool:
         """Stop a running instance."""
-        result = self._ec2.call(self._ec2.stop_instances, [instance_id])
+        result = self._call(self._ec2, self._ec2.stop_instances, [instance_id])
         if result["status"]:
             self.log(f"Stopped instance {instance_id}")
             self._cache.invalidate("instances:all")
             return True
-        self._last_error = result["response"]
         return False
 
     def reboot_instance(self, instance_id: str) -> bool:
         """Reboot an instance."""
-        result = self._ec2.call(self._ec2.reboot_instances, [instance_id])
+        result = self._call(self._ec2, self._ec2.reboot_instances, [instance_id])
         if result["status"]:
             self.log(f"Rebooted instance {instance_id}")
             return True
-        self._last_error = result["response"]
         return False
 
     def terminate_instance(self, instance_id: str) -> bool:
         """Terminate an instance."""
-        result = self._ec2.call(self._ec2.terminate_instance, instance_id)
+        result = self._call(self._ec2, self._ec2.terminate_instance, instance_id)
         if result["status"]:
             self.log(f"Terminated instance {instance_id}")
             self._cache.invalidate("instances:all")
             return True
-        self._last_error = result["response"]
         return False
 
     def create_instance(
@@ -231,40 +252,43 @@ class AWSController:
         key_name: str,
         volume_size: int,
         security_group: str,
+        root_device: str = "/dev/sda1",
+        disable_api_termination: bool = False,
     ) -> Optional[str]:
         """Create a new EC2 instance.
 
         Returns:
             Instance ID if successful, None otherwise.
         """
-        result = self._ec2.call(
+        result = self._call(
+            self._ec2,
             self._ec2.run_instance,
             image_id,
             instance_type,
             key_name,
             volume_size,
             security_group,
+            root_device,
+            disable_api_termination,
         )
         if result["status"]:
             instance_id = result["response"]["Instances"][0]["InstanceId"]
             self.log(f"Created instance {instance_id}")
             self._cache.invalidate("instances:all")
             return instance_id
-        self._last_error = result["response"]
         return None
 
     # ── EC2: Images ──────────────────────────────────────────────
 
     def get_images(self, image_name: str = "") -> List[Dict[str, Any]]:
-        """Get AMIs with caching."""
+        """Get public AMIs with caching."""
         cache_key = f"images:{image_name or 'all'}"
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_images, image_name)
+        result = self._call(self._ec2, self._ec2.describe_images, image_name)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -280,9 +304,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_key_pairs, key_name)
+        result = self._call(self._ec2, self._ec2.describe_key_pairs, key_name)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -295,12 +318,11 @@ class AWSController:
         Returns:
             Response dict if successful, None otherwise.
         """
-        result = self._ec2.call(self._ec2.create_key_pair, key_name)
+        result = self._call(self._ec2, self._ec2.create_key_pair, key_name)
         if result["status"]:
             self.log(f"Created key pair {key_name}")
             self._cache.invalidate("keypairs:all")
             return result["response"]
-        self._last_error = result["response"]
         return None
 
     # ── EC2: Security Groups ─────────────────────────────────────
@@ -312,9 +334,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_security_groups, group_name)
+        result = self._call(self._ec2, self._ec2.describe_security_groups, group_name)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -327,25 +348,23 @@ class AWSController:
         Returns:
             Group ID if successful, None otherwise.
         """
-        result = self._ec2.call(self._ec2.create_security_group, name, description)
+        result = self._call(
+            self._ec2, self._ec2.create_security_group, name, description
+        )
         if result["status"]:
             group_id = result["response"]["GroupId"]
             self.log(f"Created security group {name} ({group_id})")
             self._cache.invalidate("security_groups:all")
             return group_id
-        self._last_error = result["response"]
         return None
 
     def authorize_security_group(self, group_id: str) -> bool:
-        """Authorize all traffic for a security group."""
-        try:
-            self._ec2.authorize_all_traffic(group_id)
+        """Authorize all inbound traffic for a security group."""
+        result = self._call(self._ec2, self._ec2.authorize_all_traffic, group_id)
+        if result["status"]:
             self.log(f"Authorized all traffic for {group_id}")
             return True
-        except Exception as exc:
-            self._last_error = str(exc)
-            logging.error(f"Authorize failed: {exc}")
-            return False
+        return False
 
     # ── EC2: VPCs ────────────────────────────────────────────────
 
@@ -356,9 +375,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_vpcs)
+        result = self._call(self._ec2, self._ec2.describe_vpcs)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -372,9 +390,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._ec2.call(self._ec2.describe_subnets, vpc_id)
+        result = self._call(self._ec2, self._ec2.describe_subnets, vpc_id)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -390,9 +407,8 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._s3.call(self._s3.list_buckets)
+        result = self._call(self._s3, self._s3.list_buckets)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -401,9 +417,8 @@ class AWSController:
 
     def get_objects(self, bucket: str) -> List[Dict[str, Any]]:
         """Get S3 objects."""
-        result = self._s3.call(self._s3.list_objects, bucket)
+        result = self._call(self._s3, self._s3.list_objects, bucket)
         if not result["status"]:
-            self._last_error = result["response"]
             return []
         return result["response"]
 
@@ -416,9 +431,10 @@ class AWSController:
         if cached is not None:
             return cached
 
-        result = self._quotas.call(self._quotas.list_service_quotas, service_code)
+        result = self._call(
+            self._quotas, self._quotas.list_service_quotas, service_code
+        )
         if not result["status"]:
-            self._last_error = result["response"]
             return []
 
         data = result["response"]
@@ -440,13 +456,13 @@ class AWSController:
         self.log(f"Exported instances to {filepath}")
         return filepath
 
-    def export_images(self, filename: str) -> Optional[str]:
+    def export_images(self, filename: str, image_name: str = "") -> Optional[str]:
         """Export images to JSON.
 
         Returns:
             File path if successful, None otherwise.
         """
-        data = self.get_images()
+        data = self.get_images(image_name)
         if not data:
             return None
         filepath = save_json(data, filename)

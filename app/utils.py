@@ -2,9 +2,8 @@
 
 import datetime
 import json
-import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -24,9 +23,9 @@ __all__ = [
 ]
 
 
-def mb_to_gb(mb: int) -> int:
-    """Convert megabytes to gigabytes."""
-    return mb // 1024
+def mb_to_gb(mb: int) -> float:
+    """Convert mebibytes to gibibytes (1 decimal place)."""
+    return round(mb / 1024, 1)
 
 
 def format_datetime(dt: Any) -> str:
@@ -45,7 +44,11 @@ def ensure_results_dir() -> None:
 
 def validate_instance_id(instance_id: str) -> bool:
     """Validate EC2 instance ID format."""
-    return isinstance(instance_id, str) and instance_id.startswith("i-") and len(instance_id) >= 10
+    return (
+        isinstance(instance_id, str)
+        and instance_id.startswith("i-")
+        and len(instance_id) >= 10
+    )
 
 
 def validate_ami_id(ami_id: str) -> bool:

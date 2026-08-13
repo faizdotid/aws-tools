@@ -23,7 +23,13 @@ from .ui import (
     print_warning,
     print_panel,
 )
-from .utils import format_datetime, mb_to_gb, validate_instance_id, validate_ami_id, ensure_results_dir
+from .utils import (
+    format_datetime,
+    mb_to_gb,
+    validate_instance_id,
+    validate_ami_id,
+    ensure_results_dir,
+)
 
 __all__ = ["AWSCli"]
 
@@ -95,26 +101,28 @@ class AWSCli:
     # ── EC2 Menu ─────────────────────────────────────────────────
 
     def _ec2_menu(self) -> None:
-        if not self._require_config():
-            return
-
         while True:
-            choice = select_menu("EC2 Management", [
-                "📋 Show Instances",
-                "📦 Show Instance Types",
-                "🖼️  Show Images (AMIs)",
-                "🔑 Show Key Pairs",
-                "🔒 Show Security Groups",
-                "➕ Create Instance",
-                "🔐 Create Key Pair",
-                "🔓 Create Security Group",
-                "🌐 Authorize Security Group",
-                "▶ Start Instance",
-                "⏹ Stop Instance",
-                "🔄 Reboot Instance",
-                "🗑 Terminate Instance",
-                "🔙 Back",
-            ])
+            if not self._require_config():
+                return
+            choice = select_menu(
+                "EC2 Management",
+                [
+                    "📋 Show Instances",
+                    "📦 Show Instance Types",
+                    "🖼️  Show Images (AMIs)",
+                    "🔑 Show Key Pairs",
+                    "🔒 Show Security Groups",
+                    "➕ Create Instance",
+                    "🔐 Create Key Pair",
+                    "🔓 Create Security Group",
+                    "🌐 Authorize Security Group",
+                    "▶ Start Instance",
+                    "⏹ Stop Instance",
+                    "🔄 Reboot Instance",
+                    "🗑 Terminate Instance",
+                    "🔙 Back",
+                ],
+            )
 
             if choice == "📋 Show Instances":
                 self._show_instances()
@@ -148,7 +156,10 @@ class AWSCli:
     def _show_instances(self) -> None:
         data = self._wait_spinner("Fetching instances...", self._ctrl.get_instances)
         if not data:
-            print_error(self._ctrl.last_error or "No instances found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No instances found.")
             return
 
         table = Table(title="EC2 Instances", box=box.ROUNDED)
@@ -173,9 +184,14 @@ class AWSCli:
         press_any_key()
 
     def _show_instance_types(self) -> None:
-        data = self._wait_spinner("Fetching instance types...", self._ctrl.get_instance_types)
+        data = self._wait_spinner(
+            "Fetching instance types...", self._ctrl.get_instance_types
+        )
         if not data:
-            print_error(self._ctrl.last_error or "No data.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No instance types found.")
             return
 
         table = Table(title="EC2 Instance Types", box=box.ROUNDED)
@@ -205,12 +221,21 @@ class AWSCli:
         press_any_key()
 
     def _show_images(self) -> None:
-        data = self._wait_spinner("Fetching images...", self._ctrl.get_images)
+        name = ask_text(
+            "AMI name filter (e.g. ubuntu/images/hvm-ssd/*, debian-12-*, amzn2-*)"
+        )
+        if not name:
+            print_warning("A name filter is required to search public AMIs.")
+            return
+        data = self._wait_spinner("Fetching images...", self._ctrl.get_images, name)
         if not data:
-            print_error(self._ctrl.last_error or "No images found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No images found.")
             return
 
-        table = Table(title="Amazon Machine Images", box=box.ROUNDED)
+        table = Table(title="Public AMIs", box=box.ROUNDED)
         table.add_column("Image ID", style="cyan", no_wrap=True)
         table.add_column("Name", style="magenta")
         table.add_column("Arch", style="yellow")
@@ -226,12 +251,15 @@ class AWSCli:
         console.print(table)
         if len(data) > 50:
             print_info("Note", f"Showing 50 of {len(data)} results")
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _show_key_pairs(self) -> None:
         data = self._wait_spinner("Fetching key pairs...", self._ctrl.get_key_pairs)
         if not data:
-            print_error(self._ctrl.last_error or "No key pairs found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No key pairs found.")
             return
 
         table = Table(title="EC2 Key Pairs", box=box.ROUNDED)
@@ -246,12 +274,17 @@ class AWSCli:
                 format_datetime(kp.get("CreateTime")),
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _show_security_groups(self) -> None:
-        data = self._wait_spinner("Fetching security groups...", self._ctrl.get_security_groups)
+        data = self._wait_spinner(
+            "Fetching security groups...", self._ctrl.get_security_groups
+        )
         if not data:
-            print_error(self._ctrl.last_error or "No security groups found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No security groups found.")
             return
 
         table = Table(title="Security Groups", box=box.ROUNDED)
@@ -268,7 +301,7 @@ class AWSCli:
                 sg.get("VpcId", "N/A"),
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _create_instance(self) -> None:
         instance_type = ask_text("Instance Type (e.g. t2.micro)", default="t2.micro")
@@ -288,11 +321,19 @@ class AWSCli:
             key_pairs = self._ctrl.get_key_pairs()
 
         key_choices = [kp["KeyName"] for kp in key_pairs]
-        key_name = ask_autocomplete("Select Key Name", key_choices) if key_choices else ask_text("Key Name")
+        key_name = (
+            ask_autocomplete("Select Key Name", key_choices)
+            if key_choices
+            else ask_text("Key Name")
+        )
 
         sg_groups = self._ctrl.get_security_groups()
         sg_choices = [sg["GroupName"] for sg in sg_groups]
-        sg_name = ask_autocomplete("Security Group", sg_choices) if sg_choices else ask_text("Security Group Name")
+        sg_name = (
+            ask_autocomplete("Security Group", sg_choices)
+            if sg_choices
+            else ask_text("Security Group Name")
+        )
 
         storage_str = ask_text("Storage Size (GB)", default="8")
         try:
@@ -300,10 +341,19 @@ class AWSCli:
         except ValueError:
             storage = 8
 
+        root_device = ask_text("Root Device", default="/dev/sda1") or "/dev/sda1"
+        disable_api_termination = ask_confirm("Enable API termination protection?")
+
         instance_id = self._wait_spinner(
             "Creating instance...",
             self._ctrl.create_instance,
-            image_id, instance_type, key_name, storage, sg_name or "default"
+            image_id,
+            instance_type,
+            key_name,
+            storage,
+            sg_name or "default",
+            root_device,
+            disable_api_termination,
         )
         if instance_id:
             print_success(f"Instance {instance_id} created successfully!")
@@ -319,7 +369,9 @@ class AWSCli:
         key_name = ask_text("Key Pair Name")
         if not key_name:
             return ""
-        result = self._wait_spinner("Creating key pair...", self._ctrl.create_key_pair, key_name)
+        result = self._wait_spinner(
+            "Creating key pair...", self._ctrl.create_key_pair, key_name
+        )
         if not result:
             print_error(self._ctrl.last_error or "Failed.")
             return ""
@@ -337,7 +389,10 @@ class AWSCli:
             return
         description = ask_text("Description", default=f"Security group {name}")
         group_id = self._wait_spinner(
-            "Creating security group...", self._ctrl.create_security_group, name, description
+            "Creating security group...",
+            self._ctrl.create_security_group,
+            name,
+            description,
         )
         if group_id:
             print_success(f"Security group '{name}' created! ID: {group_id}")
@@ -399,15 +454,17 @@ class AWSCli:
     # ── VPC Menu ─────────────────────────────────────────────────
 
     def _vpc_menu(self) -> None:
-        if not self._require_config():
-            return
-
         while True:
-            choice = select_menu("VPC & Networking", [
-                "🌐 Show VPCs",
-                "📡 Show Subnets",
-                "🔙 Back",
-            ])
+            if not self._require_config():
+                return
+            choice = select_menu(
+                "VPC & Networking",
+                [
+                    "🌐 Show VPCs",
+                    "📡 Show Subnets",
+                    "🔙 Back",
+                ],
+            )
             if choice == "🌐 Show VPCs":
                 self._show_vpcs()
             elif choice == "📡 Show Subnets":
@@ -418,7 +475,10 @@ class AWSCli:
     def _show_vpcs(self) -> None:
         data = self._wait_spinner("Fetching VPCs...", self._ctrl.get_vpcs)
         if not data:
-            print_error(self._ctrl.last_error or "No VPCs found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No VPCs found.")
             return
 
         table = Table(title="VPCs", box=box.ROUNDED)
@@ -429,7 +489,8 @@ class AWSCli:
 
         for vpc in data:
             name = next(
-                (t["Value"] for t in vpc.get("Tags", []) if t["Key"] == "Name"), "Unnamed"
+                (t["Value"] for t in vpc.get("Tags", []) if t["Key"] == "Name"),
+                "Unnamed",
             )
             table.add_row(
                 vpc["VpcId"],
@@ -438,13 +499,16 @@ class AWSCli:
                 "Yes" if vpc["IsDefault"] else "No",
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _show_subnets(self) -> None:
         vpc_id = ask_text("VPC ID (optional, leave empty for all)")
         data = self._wait_spinner("Fetching subnets...", self._ctrl.get_subnets, vpc_id)
         if not data:
-            print_error(self._ctrl.last_error or "No subnets found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No subnets found.")
             return
 
         table = Table(title="Subnets", box=box.ROUNDED)
@@ -463,20 +527,22 @@ class AWSCli:
                 str(sn.get("AvailableIpAddressCount", 0)),
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     # ── S3 Menu ──────────────────────────────────────────────────
 
     def _s3_menu(self) -> None:
-        if not self._require_config():
-            return
-
         while True:
-            choice = select_menu("S3", [
-                "🪣 Show Buckets",
-                "📁 Show Objects",
-                "🔙 Back",
-            ])
+            if not self._require_config():
+                return
+            choice = select_menu(
+                "S3",
+                [
+                    "🪣 Show Buckets",
+                    "📁 Show Objects",
+                    "🔙 Back",
+                ],
+            )
             if choice == "🪣 Show Buckets":
                 self._show_buckets()
             elif choice == "📁 Show Objects":
@@ -487,7 +553,10 @@ class AWSCli:
     def _show_buckets(self) -> None:
         data = self._wait_spinner("Fetching buckets...", self._ctrl.get_buckets)
         if not data:
-            print_error(self._ctrl.last_error or "No buckets found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No buckets found.")
             return
 
         table = Table(title="S3 Buckets", box=box.ROUNDED)
@@ -497,16 +566,21 @@ class AWSCli:
         for bucket in data:
             table.add_row(bucket["Name"], format_datetime(bucket.get("CreationDate")))
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     def _show_objects(self) -> None:
         bucket = ask_text("Bucket Name")
         if not bucket:
             return
 
-        data = self._wait_spinner(f"Fetching objects from {bucket}...", self._ctrl.get_objects, bucket)
+        data = self._wait_spinner(
+            f"Fetching objects from {bucket}...", self._ctrl.get_objects, bucket
+        )
         if not data:
-            print_error(self._ctrl.last_error or "No objects found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No objects found.")
             return
 
         table = Table(title=f"Objects in {bucket}", box=box.ROUNDED)
@@ -533,19 +607,21 @@ class AWSCli:
         console.print(table)
         if len(data) > 100:
             print_info("Note", f"Showing 100 of {len(data)} objects")
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     # ── Quotas Menu ──────────────────────────────────────────────
 
     def _quotas_menu(self) -> None:
-        if not self._require_config():
-            return
-
         while True:
-            choice = select_menu("Service Quotas", [
-                "📊 Show Quotas",
-                "🔙 Back",
-            ])
+            if not self._require_config():
+                return
+            choice = select_menu(
+                "Service Quotas",
+                [
+                    "📊 Show Quotas",
+                    "🔙 Back",
+                ],
+            )
             if choice == "📊 Show Quotas":
                 self._show_quotas()
             else:
@@ -556,9 +632,14 @@ class AWSCli:
         if not code:
             return
 
-        data = self._wait_spinner(f"Fetching quotas for {code}...", self._ctrl.get_service_quotas, code)
+        data = self._wait_spinner(
+            f"Fetching quotas for {code}...", self._ctrl.get_service_quotas, code
+        )
         if not data:
-            print_error(self._ctrl.last_error or "No quotas found.")
+            if self._ctrl.last_error:
+                print_error(self._ctrl.last_error)
+            else:
+                print_info("Info", "No quotas found.")
             return
 
         table = Table(title=f"Service Quotas — {code}", box=box.ROUNDED)
@@ -577,20 +658,22 @@ class AWSCli:
                 "Yes" if quota.get("Adjustable") else "No",
             )
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()
 
     # ── Export Menu ──────────────────────────────────────────────
 
     def _export_menu(self) -> None:
-        if not self._require_config():
-            return
-
         while True:
-            choice = select_menu("Export", [
-                "📤 Export Instances to JSON",
-                "📤 Export Images to JSON",
-                "🔙 Back",
-            ])
+            if not self._require_config():
+                return
+            choice = select_menu(
+                "Export",
+                [
+                    "📤 Export Instances to JSON",
+                    "📤 Export Images to JSON",
+                    "🔙 Back",
+                ],
+            )
             if choice == "📤 Export Instances to JSON":
                 filename = ask_text("Filename", default="instances_export")
                 path = self._ctrl.export_instances(filename)
@@ -600,7 +683,13 @@ class AWSCli:
                     print_error(self._ctrl.last_error or "Export failed.")
             elif choice == "📤 Export Images to JSON":
                 filename = ask_text("Filename", default="images_export")
-                path = self._ctrl.export_images(filename)
+                name = ask_text(
+                    "AMI name filter (e.g. ubuntu/images/hvm-ssd/*, debian-12-*, amzn2-*)"
+                )
+                if not name:
+                    print_warning("A name filter is required to export images.")
+                    continue
+                path = self._ctrl.export_images(filename, name)
                 if path:
                     print_success(f"Exported to {path}")
                 else:
@@ -612,12 +701,15 @@ class AWSCli:
 
     def _config_menu(self) -> None:
         while True:
-            choice = select_menu("Configuration", [
-                "🔑 Configure AWS Credentials",
-                "🌍 Change Region",
-                "🗺️  Show Supported Regions",
-                "🔙 Back",
-            ])
+            choice = select_menu(
+                "Configuration",
+                [
+                    "🔑 Configure AWS Credentials",
+                    "🌍 Change Region",
+                    "🗺️  Show Supported Regions",
+                    "🔙 Back",
+                ],
+            )
             if choice == "🔑 Configure AWS Credentials":
                 self._configure()
             elif choice == "🌍 Change Region":
@@ -664,4 +756,4 @@ class AWSCli:
         for region in RegionConfig.REGIONS:
             table.add_row(region["name"], region["description"])
         console.print(table)
-        input("\nPress Enter to continue...")
+        press_any_key()

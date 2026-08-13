@@ -1,3 +1,5 @@
 results/*
-app/__pycache__/*
-client.log
+__pycache__/
+*.pyc
+*.log
+.DS_Store

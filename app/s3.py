@@ -32,40 +32,14 @@ class S3Client(BaseClient):
         Returns:
             List of object dictionaries.
         """
-        kwargs = {"Bucket": bucket}
+        kwargs: Dict[str, Any] = {"Bucket": bucket}
         if prefix:
             kwargs["Prefix"] = prefix
-        response = self.client.list_objects_v2(**kwargs)
-        return response.get("Contents", [])
-
-    def get_bucket_location(self, bucket: str) -> str:
-        """Get bucket region.
-
-        Args:
-            bucket: Bucket name.
-
-        Returns:
-            Region name (returns 'us-east-1' if empty).
-        """
-        response = self.client.get_bucket_location(Bucket=bucket)
-        loc = response.get("LocationConstraint")
-        return loc if loc else "us-east-1"
-
-    def get_bucket_info(self, bucket: str) -> Dict[str, Any]:
-        """Get combined bucket info.
-
-        Args:
-            bucket: Bucket name.
-
-        Returns:
-            Dictionary with region, object count, and total size.
-        """
-        location = self.get_bucket_location(bucket)
-        objects = self.list_objects(bucket)
-        total_size = sum(obj.get("Size", 0) for obj in objects)
-        return {
-            "Bucket": bucket,
-            "Region": location,
-            "ObjectCount": len(objects),
-            "TotalSizeBytes": total_size,
-        }
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.list_objects_v2(**kwargs)
+            results.extend(response.get("Contents", []))
+            if not response.get("IsTruncated"):
+                break
+            kwargs["ContinuationToken"] = response.get("NextContinuationToken")
+        return results

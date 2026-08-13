@@ -1,11 +1,15 @@
 """EC2 service client with AWS API wrappers."""
 
-import datetime
+import logging
 from typing import Any, Dict, List
+
+from botocore.exceptions import ClientError
 
 from .boto3_base import BaseClient
 
 __all__ = ["EC2Client"]
+
+logger = logging.getLogger(__name__)
 
 
 class EC2Client(BaseClient):
@@ -25,11 +29,18 @@ class EC2Client(BaseClient):
         Returns:
             List of instance type dictionaries sorted by vCPU count.
         """
-        filters = [{"Name": "instance-type", "Values": [instance_type]}] if instance_type else []
-        response = self.client.describe_instance_types(Filters=filters)
-        return sorted(
-            response["InstanceTypes"], key=lambda item: item["VCpuInfo"]["DefaultVCpus"]
-        )
+        kwargs: Dict[str, Any] = {}
+        if instance_type:
+            kwargs["Filters"] = [{"Name": "instance-type", "Values": [instance_type]}]
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_instance_types(**kwargs)
+            results.extend(response.get("InstanceTypes", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["VCpuInfo"]["DefaultVCpus"])
 
     # ── Instances ────────────────────────────────────────────────
 
@@ -42,25 +53,19 @@ class EC2Client(BaseClient):
         Returns:
             List of reservation dictionaries sorted by launch time.
         """
-        filters = [{"Name": "instance-id", "Values": [instance_id]}] if instance_id else []
-        response = self.client.describe_instances(Filters=filters)
-        return sorted(
-            response["Reservations"], key=lambda item: item["Instances"][0]["LaunchTime"]
-        )
-
-    def describe_instance_status(self, instance_ids: List[str]) -> List[Dict[str, Any]]:
-        """Describe status of EC2 instances.
-
-        Args:
-            instance_ids: List of instance IDs to query.
-
-        Returns:
-            List of instance status dictionaries.
-        """
-        if not instance_ids:
-            return []
-        response = self.client.describe_instance_status(InstanceIds=instance_ids, IncludeAllInstances=True)
-        return response.get("InstanceStatuses", [])
+        kwargs: Dict[str, Any] = {}
+        if instance_id:
+            kwargs["Filters"] = [{"Name": "instance-id", "Values": [instance_id]}]
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_instances(**kwargs)
+            results.extend(response.get("Reservations", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        results = [r for r in results if r.get("Instances")]
+        return sorted(results, key=lambda item: item["Instances"][0]["LaunchTime"])
 
     def run_instance(
         self,
@@ -69,6 +74,8 @@ class EC2Client(BaseClient):
         key_name: str,
         volume_size: int,
         security_group: str,
+        root_device: str = "/dev/sda1",
+        disable_api_termination: bool = False,
     ) -> Dict[str, Any]:
         """Launch a new EC2 instance.
 
@@ -78,20 +85,22 @@ class EC2Client(BaseClient):
             key_name: Key pair name.
             volume_size: Root volume size in GB.
             security_group: Security group name.
+            root_device: Root device name (e.g., '/dev/sda1').
+            disable_api_termination: Enable API termination protection.
 
         Returns:
             Run instances response dictionary.
         """
         return self.client.run_instances(
             BlockDeviceMappings=[
-                {"DeviceName": "/dev/sda1", "Ebs": {"VolumeSize": volume_size}}
+                {"DeviceName": root_device, "Ebs": {"VolumeSize": volume_size}}
             ],
             ImageId=image_id,
             InstanceType=instance_type,
             KeyName=key_name,
             MinCount=1,
             MaxCount=1,
-            DisableApiTermination=True,
+            DisableApiTermination=disable_api_termination,
             SecurityGroups=[security_group],
         )
 
@@ -143,44 +152,41 @@ class EC2Client(BaseClient):
             self.client.modify_instance_attribute(
                 InstanceId=instance_id, DisableApiTermination={"Value": False}
             )
-        except Exception:
-            pass
+        except ClientError as exc:
+            logger.warning(
+                "Failed to disable termination protection for %s: %s",
+                instance_id,
+                exc,
+            )
         return self.client.terminate_instances(InstanceIds=[instance_id])
-
-    def get_password_data(self, instance_id: str) -> Dict[str, Any]:
-        """Get Windows instance password data.
-
-        Args:
-            instance_id: Instance ID.
-
-        Returns:
-            Password data response dictionary.
-        """
-        return self.client.get_password_data(InstanceId=instance_id)
 
     # ── Images (AMIs) ────────────────────────────────────────────
 
     def describe_images(self, image_name: str = "") -> List[Dict[str, Any]]:
-        """Describe available Amazon machine images.
+        """Describe publicly available machine images.
 
         Args:
-            image_name: Filter by image name (optional).
+            image_name: Filter by image name (e.g., 'ubuntu/images/hvm-ssd/*').
 
         Returns:
             List of image dictionaries sorted by creation date.
         """
-        filters = []
+        filters = [
+            {"Name": "state", "Values": ["available"]},
+            {"Name": "image-type", "Values": ["machine"]},
+        ]
         if image_name:
             filters.append({"Name": "name", "Values": [image_name]})
-        filters.extend(
-            [
-                {"Name": "state", "Values": ["available"]},
-                {"Name": "image-type", "Values": ["machine"]},
-                {"Name": "creation-date", "Values": [f"{datetime.datetime.now().year}*"]},
-            ]
-        )
-        response = self.client.describe_images(Filters=filters, Owners=["amazon"])
-        return sorted(response["Images"], key=lambda item: item["CreationDate"])
+        kwargs: Dict[str, Any] = {"Filters": filters}
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_images(**kwargs)
+            results.extend(response.get("Images", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["CreationDate"])
 
     # ── Key Pairs ────────────────────────────────────────────────
 
@@ -193,9 +199,18 @@ class EC2Client(BaseClient):
         Returns:
             List of key pair dictionaries sorted by name.
         """
-        filters = [{"Name": "key-name", "Values": [key_name]}] if key_name else []
-        response = self.client.describe_key_pairs(Filters=filters)
-        return sorted(response["KeyPairs"], key=lambda item: item["KeyName"])
+        kwargs: Dict[str, Any] = {}
+        if key_name:
+            kwargs["Filters"] = [{"Name": "key-name", "Values": [key_name]}]
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_key_pairs(**kwargs)
+            results.extend(response.get("KeyPairs", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["KeyName"])
 
     def create_key_pair(self, key_name: str) -> Dict[str, Any]:
         """Create a new key pair.
@@ -219,11 +234,22 @@ class EC2Client(BaseClient):
         Returns:
             List of security group dictionaries sorted by name.
         """
-        filters = [{"Name": "group-name", "Values": [group_name]}] if group_name else []
-        response = self.client.describe_security_groups(Filters=filters)
-        return sorted(response["SecurityGroups"], key=lambda item: item["GroupName"])
+        kwargs: Dict[str, Any] = {}
+        if group_name:
+            kwargs["Filters"] = [{"Name": "group-name", "Values": [group_name]}]
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_security_groups(**kwargs)
+            results.extend(response.get("SecurityGroups", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["GroupName"])
 
-    def create_security_group(self, group_name: str, description: str) -> Dict[str, Any]:
+    def create_security_group(
+        self, group_name: str, description: str
+    ) -> Dict[str, Any]:
         """Create a security group.
 
         Args:
@@ -238,25 +264,15 @@ class EC2Client(BaseClient):
         )
 
     def authorize_all_traffic(self, group_id: str) -> None:
-        """Authorize all inbound and outbound traffic (0.0.0.0/0).
+        """Authorize all inbound traffic (0.0.0.0/0, all protocols).
 
-        Args:
-            group_id: Security group ID.
+        Raises:
+            ClientError: If authorization fails.
         """
-        ip_permissions = [
-            {"IpProtocol": "-1", "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}
-        ]
-        actions = [
-            self.client.authorize_security_group_ingress,
-            self.client.authorize_security_group_egress,
-            self.client.update_security_group_rule_descriptions_ingress,
-            self.client.update_security_group_rule_descriptions_egress,
-        ]
-        for action in actions:
-            try:
-                action(GroupId=group_id, IpPermissions=ip_permissions)
-            except Exception:
-                pass
+        ip_permissions = [{"IpProtocol": "-1", "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}]
+        self.client.authorize_security_group_ingress(
+            GroupId=group_id, IpPermissions=ip_permissions
+        )
 
     # ── VPC & Networking ─────────────────────────────────────────
 
@@ -266,8 +282,16 @@ class EC2Client(BaseClient):
         Returns:
             List of VPC dictionaries sorted by ID.
         """
-        response = self.client.describe_vpcs()
-        return sorted(response["Vpcs"], key=lambda item: item["VpcId"])
+        kwargs: Dict[str, Any] = {}
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_vpcs(**kwargs)
+            results.extend(response.get("Vpcs", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["VpcId"])
 
     def describe_subnets(self, vpc_id: str = "") -> List[Dict[str, Any]]:
         """Describe subnets.
@@ -278,6 +302,15 @@ class EC2Client(BaseClient):
         Returns:
             List of subnet dictionaries sorted by ID.
         """
-        kwargs = {"Filters": [{"Name": "vpc-id", "Values": [vpc_id]}]} if vpc_id else {}
-        response = self.client.describe_subnets(**kwargs)
-        return sorted(response["Subnets"], key=lambda item: item["SubnetId"])
+        kwargs: Dict[str, Any] = {}
+        if vpc_id:
+            kwargs["Filters"] = [{"Name": "vpc-id", "Values": [vpc_id]}]
+        results: List[Dict[str, Any]] = []
+        while True:
+            response = self.client.describe_subnets(**kwargs)
+            results.extend(response.get("Subnets", []))
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            kwargs["NextToken"] = next_token
+        return sorted(results, key=lambda item: item["SubnetId"])

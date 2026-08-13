@@ -2,8 +2,7 @@
 
 from typing import List, Dict, Optional
 
-from boto3 import Session
-from boto3.session import Session as BotoSession
+from boto3.session import Session
 
 from .config import RegionConfig
 
@@ -13,7 +12,9 @@ __all__ = ["SessionManager"]
 class SessionManager:
     """Manages AWS boto3 session lifecycle."""
 
-    __session: Optional[BotoSession] = None
+    __session: Optional[Session] = None
+    __access_key_id: Optional[str] = None
+    __secret_access_key: Optional[str] = None
 
     @classmethod
     def configure(
@@ -29,11 +30,38 @@ class SessionManager:
             aws_secret_access_key: AWS secret access key.
             region_name: AWS region name.
         """
+        cls.__access_key_id = aws_access_key_id
+        cls.__secret_access_key = aws_secret_access_key
         cls.__session = Session(
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
             region_name=region_name,
         )
+
+    @classmethod
+    def update_region(cls, region_name: str) -> None:
+        """Recreate the session with the same credentials and a new region.
+
+        Args:
+            region_name: AWS region name.
+
+        Raises:
+            RuntimeError: If session has not been configured.
+        """
+        if cls.__session is None:
+            raise RuntimeError("Session not configured. Call configure() first.")
+        cls.__session = Session(
+            aws_access_key_id=cls.__access_key_id,
+            aws_secret_access_key=cls.__secret_access_key,
+            region_name=region_name,
+        )
+
+    @classmethod
+    def reset(cls) -> None:
+        """Clear the configured session and credentials."""
+        cls.__session = None
+        cls.__access_key_id = None
+        cls.__secret_access_key = None
 
     @classmethod
     def get_client(cls, service_name: str, region_name: str):
@@ -59,7 +87,7 @@ class SessionManager:
         return cls.__session is not None
 
     @classmethod
-    def get_session(cls) -> Optional[BotoSession]:
+    def get_session(cls) -> Optional[Session]:
         """Get the current boto3 session."""
         return cls.__session
 
